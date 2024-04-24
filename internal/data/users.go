@@ -286,7 +286,6 @@ func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error)
 		&user.Password.hash,
 		&user.Activated,
 		&user.Version,
-		
 	)
 	if err != nil {
 		switch {

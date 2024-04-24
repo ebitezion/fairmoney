@@ -20,7 +20,8 @@ func (app *application) routes() *httprouter.Router {
 
 	// Register relevant methods, URL patterns and handler functions for our
 	// endpoints using the HandlerFunc() method.
-	router.HandlerFunc(http.MethodGet, "/v1/healthcheck", app.requirePermission("account:read",app.healthcheckHandler))
+	//router.HandlerFunc(http.MethodGet, "/v1/healthcheck", app.requirePermission("account:read",app.healthcheckHandler))
+	router.HandlerFunc(http.MethodGet, "/v1/healthcheck", app.healthcheckHandler)
 
 	router.HandlerFunc(http.MethodPost, "/v1/users", app.registerUserHandler)
 	//  POST /v1/tokens/activation endpoint for activation
