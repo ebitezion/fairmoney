@@ -9,9 +9,11 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ebitezion/backend-framework/internal/validator"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Retrieve the "id" URL parameter from the current request context, then convert
@@ -62,6 +64,36 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data envelo
 	return nil
 }
 
+// Define a successJSON() helper for sending success responses. This takes the destination
+// http.ResponseWriter, the HTTP status code to send, the data to encode to JSON,
+// and a header map containing any additional HTTP headers we want to include in
+// the response.
+func (app *application) successJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
+	// Encode the data to JSON, returning the error if there was one.
+	js, err := json.MarshalIndent(data, "", "\t")
+	if err != nil {
+		return err
+	}
+
+	// Append a newline to make it easier to view in terminal applications
+	js = append(js, '\n')
+
+	// Add any headers that we want to include. We loop through the header map and
+	// add each header to the http.ResponseWriter header map. Note that it's OK if
+	// the provided header map is nil. Go doesn't throw an error if you try to range
+	// over (or generally, read from) a nil map.
+	for key, value := range headers {
+		w.Header()[key] = value
+	}
+
+	// Add the "Content-Type: application/json" header, then write the status code
+	// and JSON response.
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(js)
+
+	return nil
+}
 func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
 	// Use the http.MaxBytesReaeder() to limit the size of the request body to 1MB.
 	maxBytes := 1_048_576
@@ -221,19 +253,56 @@ func (app *application) background(fn func()) {
 			}
 		}()
 		// Execute the arbitrary function that we passed as the parameter.
+
 		fn()
 	}()
 }
 
-func (app *application) exampleHandler(w http.ResponseWriter, r *http.Request) {
-	user := app.contextGetUser(r)
-	if user.IsAnonymous() {
-		app.authenticationRequiredResponse(w, r)
-		return
+
+// Encrypt and decrypt PIN
+// Encrypt takes a PIN and a key, encrypts the PIN, and returns the ciphertext.
+// EncryptPIN encrypts a PIN using bcrypt.
+func EncryptPIN(pin string) (string, error) {
+	hashedPin, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
 	}
-	if !user.Activated {
-		app.inactiveAccountResponse(w, r)
-		return
+	return string(hashedPin), nil
+}
+
+// VerifyPIN verifies a PIN against its hashed value.
+func VerifyPIN(hashedPin, pin string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hashedPin), []byte(pin))
+	return err == nil
+}
+
+// SuccessFormater formats that json for successesful calls to apis
+func (app *application) SuccessFormater(data interface{}, message string) map[string]interface{} {
+	env := envelope{
+		"status_code": "00",
+		"status":      message,
+		"data":        data,
 	}
-	// The rest of the handler logic goes here...
+	return env
+}
+
+func verifyAuthTokenByID(authtoken, userID string) {
+
+}
+
+func (app *application) ConvertDateFormat(inputDate string) (string, error) {
+	// Define the input date format
+	inputFormat := "02/01/06"
+
+	// Parse the input date string
+	parsedDate, err := time.Parse(inputFormat, inputDate)
+	if err != nil {
+		return "", err
+	}
+
+	// Format the parsed date into desired format "07-Feb-1995"
+	outputFormat := "02-Jan-2006"
+	formattedDate := parsedDate.Format(outputFormat)
+
+	return formattedDate, nil
 }

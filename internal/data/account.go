@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"sort"
 	"strconv"
 	"time"
 )
@@ -32,13 +31,7 @@ type AccountDetails struct {
 	Updated_at      string `json:"updated_at"`
 	Limits          string `json:"limits"`
 	Counter         string `json:"counter"`
-}
-
-type AccountHistory struct {
-	AccountNumber string `json:"accountNumber"`
-	Pagination    string `json:"pagination"`
-	StartDate     string `json:"startDate"`
-	EndDate       string `json:"endDate"`
+	Balance         string `json:"balance"`
 }
 
 type AccountNumber struct {
@@ -137,20 +130,6 @@ type AccountStatementData struct {
 	TransactionDesc   string `json:"transactionDesc"`
 	TransactionRef    string `json:"transactionRef"`
 	TransactionType   string `json:"transactionType"`
-}
-
-// SortByDate sorts the transactions by transaction date.
-func SortByDate(transactions []AccountStatementData) {
-	sort.Slice(transactions, func(i, j int) bool {
-		return transactions[i].TransactionDate > transactions[j].TransactionDate
-	})
-}
-
-type PdfData struct {
-	AccountName          string `json:"accountName"`
-	AccountNumber        string `json:"accountNumber"`
-	TransactionStartDate string `json:"transactionDate"`
-	TransactioEndDate    string
 }
 
 func (m AccountModel) UpdateLimitStatus(LimitID int) error {
@@ -438,42 +417,16 @@ func (a AccountModel) SaveCreatedAccountNo(data *AccountDetails) error {
 	defer cancel()
 
 	// Execute the query directly with the values
-	re, err := a.DB.ExecContext(ctx, query, data.User_id, data.Account_number, data.Limits, data.Created_at, data.Updated_at, data.Counter)
+	_, err := a.DB.ExecContext(ctx, query, data.User_id, data.Account_number, data.Limits, data.Created_at, data.Updated_at, data.Counter)
 	if err != nil {
 		fmt.Println("ERRRRR:", err)
 		return err
 	}
-	fmt.Println("Result:", re)
+	
 	return nil
 }
 
-// NewAccountUpgrade inserts account upgrade data into the database.
-// func (a AccountModel) SaveTransactionDetails(transactions *Transaction) error {
-// 	// Define the SQL query with correct placeholders created_at, updated_at,
-// 	query := `
-// 	INSERT INTO transactions(user_id,type, source, narration, account_number, request_id, internal_reference, external_reference, amount,  status)
-// 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,?)`
-// 	args := []interface{}{
-// 		&transactions.UserID,
-// 		&transactions.Type,
-// 		&transactions.Source,
-// 		&transactions.Narration,
-// 		&transactions.AccountNumber,
-// 		&transactions.RequestID,
-// 		&transactions.InternalReference,
-// 		&transactions.ExternalReference,
-// 		&transactions.Amount,
-// 		&transactions.Status,
-// 	}
 
-// 	//var transactions []Transaction
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-// 	defer cancel()
-
-// 	// Execute the query
-// 	_, err := a.DB.ExecContext(ctx, query, args...)
-// 	return err
-// }
 
 func (a AccountModel) SaveTransactionDetails(transaction *Transaction) error {
 	// Define the SQL query with correct placeholders created_at, updated_at,
@@ -500,31 +453,7 @@ func (a AccountModel) SaveTransactionDetails(transaction *Transaction) error {
 	return err
 }
 
-// // NewAaccountUpgrade inserts account upgrade data into the database.
-// func (a AccountModel) SaveCreatedAccountNo2(User_id, Account_number, Created_at, Updated_at, Limits string) error {
-// 	query := `
-// 	INSERT INTO user_details(user_id, account_number, created_at, updated_at, limits)
-// 	VALUES (?, ?, ?, ?, ?, ?, ?)`
-// 	args := []interface{}{
-// 		User_id,
-// 		Account_number,
-// 		Created_at,
-// 		Updated_at,
-// 		Limits,
-// 	}
-// 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-// 	defer cancel()
-// 	//set default value for limits, created_at,updated_at and counter,
 
-// 	Limits = `{"transfers":{"single":200000,"daily":600000},"bills":{"single":100000,"daily":200000},"ussd":{"single":10000,"daily":20000}}`
-// 	Created_at = time.Now().String()
-// 	Updated_at = time.Now().String()
-
-//		_, err := a.DB.ExecContext(ctx, query, args...)
-//		return err
-//	}
-//
-// NewAccountUpgrade inserts account upgrade data into the database.
 func (a AccountModel) SaveCreatedAccountNo2(User_id, Account_number, Limits, Counter string, Created_at, Updated_at time.Time) error {
 	// Define the SQL query with correct placeholders
 	query := `

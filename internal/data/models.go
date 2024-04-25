@@ -33,7 +33,7 @@ type Models struct {
 	Tokens      TokenModel
 	Permissions PermissionModel
 	// VersionModel     VersionModel
-	// AccountModel     AccountModel
+	AccountModel AccountModel
 	// MediaModel       MediaModel
 	// ErrorModel       ErrorModel
 	// VerifyModel      VerifyModel
@@ -48,7 +48,7 @@ func NewModels(db *sql.DB) Models {
 		Tokens:      TokenModel{DB: db},
 		Permissions: PermissionModel{DB: db},
 		// VersionModel:     VersionModel{DB: db},
-		// AccountModel:     AccountModel{DB: db},
+		AccountModel: AccountModel{DB: db},
 		// MediaModel:       MediaModel{DB: db},
 		// ErrorModel:       ErrorModel{DB: db},
 		// VerifyModel:      VerifyModel{DB: db},
