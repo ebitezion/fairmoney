@@ -64,6 +64,7 @@ type UserDetailsForLimits struct {
 	UserID        string      `json:"userID"`
 	PIN           string      `json:"-"`
 	AccountNumber string      `json:"accountNumber"`
+	Balance       string      `json:"balance"`
 	Limits        Limits      `json:"limits"`
 	Counter       LimitCounts `json:"count"`
 	//TransactionPIN string `json:`
@@ -410,6 +411,153 @@ func (m UserModel) GetByPhoneNumber(phoneNumber string) (*User, error) {
 	return &user, nil
 }
 
+func (m UserModel) GetUserIdByToken(tokenScope, tokenPlaintext string) (int64, error) {
+	// Calculate the SHA-256 hash of the plaintext token provided by the client.
+	// Remember that this returns a byte *array* with length 32, not a slice.
+	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+
+	// Set up the SQL query.
+	query := `
+	SELECT tokens.user_id
+	FROM tokens
+	WHERE tokens.hash = ?
+	AND tokens.scope = ?
+	AND tokens.expiry > ?`
+	// Create a slice containing the query arguments. Notice how we use the [:] operator
+	// to get a slice containing the token hash, rather than passing in the array (which
+	// is not supported by the pq driver), and that we pass the current time as the
+	// value to check against the token expiry.
+	args := []interface{}{tokenHash[:], tokenScope, time.Now()}
+	var ID int64
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// Execute the query, scanning the return values into a User struct. If no matching
+	// record is found we return an ErrRecordNotFound error.
+	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
+		&ID,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return 0, ErrRecordNotFound
+		default:
+			return 0, err
+		}
+	}
+	// Return the matching user.
+	return ID, nil
+}
+
+func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
+	// Calculate the SHA-256 hash of the plaintext token provided by the client.
+	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+
+	// Set up the SQL query.
+	query := `
+	SELECT users.id, users.created_at, users.name, users.username, users.email, users.password, users.phone_number, users.activated, users.version
+	FROM users
+	INNER JOIN tokens
+	ON users.id = tokens.user_id
+	WHERE tokens.hash = ?
+	AND tokens.scope = ?
+	AND tokens.expiry > NOW()`
+
+	// Create a context with a timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Execute the query.
+	var user User
+	var phoneNumber sql.NullString
+	err := m.DB.QueryRowContext(ctx, query, tokenHash[:], tokenScope).Scan(
+		&user.ID,
+		&user.CreatedAt,
+		&user.Name,
+		&user.Username,
+		&user.Email,
+		&user.Password.hash,
+		&phoneNumber,
+		&user.Activated,
+		&user.Version,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+
+	if phoneNumber.Valid {
+		user.PhoneNumber = phoneNumber.String
+	}
+
+	// Return the matching user.
+	return &user, nil
+}
+
+func (m UserModel) GetUserDetailsFromToken(tokenScope, tokenPlaintext string) (*UserDetailsForLimits, error) {
+	// Calculate the SHA-256 hash of the plaintext token provided by the client.
+	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+
+	// Set up the SQL query.
+	query := `
+    SELECT user_details.user_id, user_details.account_number, user_details.limits, user_details.counter, user_details.transaction_pin,user_details.balance
+    FROM user_details
+    INNER JOIN tokens
+    ON user_details.user_id = tokens.user_id
+    WHERE tokens.hash = ?
+    AND tokens.scope = ?
+    AND tokens.expiry > NOW()`
+
+	// Create a slice containing the query arguments.
+	args := []interface{}{tokenHash[:], tokenScope}
+	var user UserDetailsForLimits
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Execute the query, scanning the return values into a User struct.
+	var limitsJSON, limitCount string // Assuming limitsJSON is retrieved from the database
+	var transactionPIN sql.NullString
+	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
+		&user.UserID,
+		&user.AccountNumber,
+		&limitsJSON, // Updated to scan limitsJSON
+		&limitCount,
+		&transactionPIN,
+		&user.Balance,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	// Unmarshal limitsJSON into the Limits struct
+	err = json.Unmarshal([]byte(limitsJSON), &user.Limits)
+	if err != nil {
+		return nil, err
+	}
+	//Unmarshal limitCount into the Limitcount struct
+	err = json.Unmarshal([]byte(limitCount), &user.Counter)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return the matching user.
+	return &user, nil
+}
+
+/*
+
+
+Miscellaneous
+
+
+*/
+
 // Retrieve the User details from the database based on the user's email address and device ID.
 // Because we have a UNIQUE constraint on the email column, this SQL query will only
 // return one record (or none at all, in which case we return a ErrRecordNotFound error).
@@ -561,149 +709,6 @@ func (m UserModel) Update(user *User) error {
 		}
 	}
 	return nil
-}
-
-func (m UserModel) GetUserIdByToken(tokenScope, tokenPlaintext string) (int64, error) {
-	// Calculate the SHA-256 hash of the plaintext token provided by the client.
-	// Remember that this returns a byte *array* with length 32, not a slice.
-	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
-
-	// Set up the SQL query.
-	query := `
-	SELECT tokens.user_id
-	FROM tokens
-	WHERE tokens.hash = ?
-	AND tokens.scope = ?
-	AND tokens.expiry > ?`
-	// Create a slice containing the query arguments. Notice how we use the [:] operator
-	// to get a slice containing the token hash, rather than passing in the array (which
-	// is not supported by the pq driver), and that we pass the current time as the
-	// value to check against the token expiry.
-	args := []interface{}{tokenHash[:], tokenScope, time.Now()}
-	var ID int64
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	// Execute the query, scanning the return values into a User struct. If no matching
-	// record is found we return an ErrRecordNotFound error.
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
-		&ID,
-	)
-	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return 0, ErrRecordNotFound
-		default:
-			return 0, err
-		}
-	}
-	// Return the matching user.
-	return ID, nil
-}
-
-func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
-	// Calculate the SHA-256 hash of the plaintext token provided by the client.
-	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
-
-	// Set up the SQL query.
-	query := `
-	SELECT users.id, users.created_at, users.name, users.username, users.email, users.password, users.phone_number, users.activated, users.version
-	FROM users
-	INNER JOIN tokens
-	ON users.id = tokens.user_id
-	WHERE tokens.hash = ?
-	AND tokens.scope = ?
-	AND tokens.expiry > NOW()`
-
-	// Create a context with a timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	// Execute the query.
-	var user User
-	var phoneNumber sql.NullString
-	err := m.DB.QueryRowContext(ctx, query, tokenHash[:], tokenScope).Scan(
-		&user.ID,
-		&user.CreatedAt,
-		&user.Name,
-		&user.Username,
-		&user.Email,
-		&user.Password.hash,
-		&phoneNumber,
-		&user.Activated,
-		&user.Version,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrRecordNotFound
-		}
-		return nil, err
-	}
-
-	if phoneNumber.Valid {
-		user.PhoneNumber = phoneNumber.String
-	}
-
-	// Return the matching user.
-	return &user, nil
-}
-
-func (m UserModel) GetUserDetailsFromToken(tokenScope, tokenPlaintext string) (*UserDetailsForLimits, error) {
-	// Calculate the SHA-256 hash of the plaintext token provided by the client.
-	tokenHash := sha256.Sum256([]byte(tokenPlaintext))
-
-	// Set up the SQL query.
-	query := `
-    SELECT user_details.user_id, user_details.account_number, user_details.limits, user_details.counter, user_details.transaction_pin
-    FROM user_details
-    INNER JOIN tokens
-    ON user_details.user_id = tokens.user_id
-    WHERE tokens.hash = ?
-    AND tokens.scope = ?
-    AND tokens.expiry > NOW()`
-
-	// Create a slice containing the query arguments.
-	args := []interface{}{tokenHash[:], tokenScope}
-	var user UserDetailsForLimits
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	// Execute the query, scanning the return values into a User struct.
-	var limitsJSON, limitCount string // Assuming limitsJSON is retrieved from the database
-	var transactionPIN sql.NullString
-	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
-		&user.UserID,
-		&user.AccountNumber,
-		&limitsJSON, // Updated to scan limitsJSON
-		&limitCount,
-		&transactionPIN,
-	)
-	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return nil, ErrRecordNotFound
-		default:
-			return nil, err
-		}
-	}
-	fmt.Println("Check TPIN", transactionPIN.String)
-	if !transactionPIN.Valid || transactionPIN.String == "" {
-		fmt.Println("I got into Transaction Pin Validity Check", transactionPIN.String)
-		return &user, ErrTransactionPINNotSet
-	}
-
-	// Unmarshal limitsJSON into the Limits struct
-	err = json.Unmarshal([]byte(limitsJSON), &user.Limits)
-	if err != nil {
-		return nil, err
-	}
-	//Unmarshal limitCount into the Limitcount struct
-	err = json.Unmarshal([]byte(limitCount), &user.Counter)
-	if err != nil {
-		return nil, err
-	}
-
-	// Return the matching user.
-	return &user, nil
 }
 
 func (m UserModel) GetUserDetailsAndPINFromToken(tokenScope, tokenPlaintext string) (*UserDetailsWithPIN, error) {

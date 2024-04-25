@@ -27,6 +27,7 @@ func (app *application) routes() *httprouter.Router {
 	router.HandlerFunc(http.MethodPost, "/v1/accounts", app.CreateBankAccount)
 	//  POST /v1/tokens/activation endpoint for activation
 
+	router.HandlerFunc(http.MethodGet, "/v1/users/userDetails", app.GetUserDetails)
 	//authorize our API with this
 	router.HandlerFunc(http.MethodPost, "/v1/tokens/authentication", app.createAuthenticationTokenHandler)
 

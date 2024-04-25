@@ -48,16 +48,14 @@ type NameEnquiryRequest struct {
 
 // Internal Transfer
 const (
-	// ORBIT_INTERNAL_DEBIT_TRANSFER = "http://102.218.81.27:9009/account/debitInstruction"
-	// ORBIT_INTERNAL_DEBIT_TRANSFER = "http://154.113.83.115:8087/account/debitInstruction"
-	ORBIT_INTERNAL_DEBIT_TRANSFER  = "http://154.113.83.115:9009/account/debitInstruction"
-	ORBIT_EXTERNAL_DEBIT_TRANSFER  = "http://154.113.83.115:9005/neptune/rest/fundsTransferCredit"
-	ORBIT_INTERNAL_CREDIT_TRANSFER = " http://154.113.83.115:9009/account/creditInstruction"
+	ORBIT_INTERNAL_DEBIT_TRANSFER  = ""
+	ORBIT_EXTERNAL_DEBIT_TRANSFER  = ""
+	ORBIT_INTERNAL_CREDIT_TRANSFER = ""
 )
 
 // External Transfer
 const (
-	BaseURL                     = "http://154.113.83.115:9005/neptune/rest"
+	BaseURL                     = ""
 	FundsTransferCreditEndpoint = "/fundsTransferCredit"
 	GetBanksPath                = "/getBanks"
 	NameEnquiryPath             = "/nameEnquiry"
